@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluid Arch AI - Standalone</title>
+    
+    <!-- Tailwind CSS v4 Browser CDN -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    
+    <style type="text/css">
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @import "tailwindcss";
+
+        @theme {
+            --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+            --color-cyber-yellow: #FDE047;
+            --color-void-bg: #0A0A0A;
+            --color-void-surface: #171717;
+            --color-void-accent: #262626;
+        }
+
+        @layer base {
+            body {
+                @apply bg-void-bg text-white font-sans overflow-x-hidden;
+            }
+        }
+
+        @layer components {
+            .liquid-hero {
+                @apply bg-cyber-yellow text-black rounded-br-[120px] rounded-bl-[40px] relative overflow-hidden;
+            }
+
+            .glass-card {
+                @apply bg-white/10 backdrop-blur-2xl border border-white/20 rounded-[32px] shadow-2xl;
+            }
+
+            .pill-button {
+                @apply rounded-full px-8 py-3 font-bold transition-all active:scale-95 hover:scale-105;
+            }
+
+            .pill-button-primary {
+                @apply bg-black text-white hover:bg-void-surface;
+            }
+
+            .pill-button-yellow {
+                @apply bg-cyber-yellow text-black hover:brightness-110;
+            }
+
+            .liquid-section-divider {
+                @apply h-32 bg-cyber-yellow rounded-b-[100px] -mt-1;
+            }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19",
+        "react-dom": "https://esm.sh/react-dom@19",
+        "react-dom/client": "https://esm.sh/react-dom@19/client",
+        "@google/genai": "https://esm.sh/@google/genai",
+        "motion/react": "https://esm.sh/motion/react",
+        "lucide-react": "https://esm.sh/lucide-react"
+      }
+    }
+    </script>
+
+    <script type="module">
+        import React, { useState, useEffect } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { GoogleGenAI } from "@google/genai";
+        import { motion, AnimatePresence } from 'motion/react';
+        import { 
+            Compass, PenTool, Loader2, AlertCircle, ArrowRight,
+            Sparkles, Layout, Maximize2, MousePointer2 
+        } from 'lucide-react';
+
+        // --- Configuration ---
+        let GEMINI_API_KEY = ""; 
+
+        const getApiKey = () => {
+            if (GEMINI_API_KEY) return GEMINI_API_KEY;
+            const saved = localStorage.getItem('GEMINI_API_KEY');
+            if (saved) return saved;
+            const input = prompt("Please enter your Gemini API Key:");
+            if (input) {
+                localStorage.setItem('GEMINI_API_KEY', input);
+                return input;
+            }
+            return "";
+        };
+
+        const initAi = () => {
+            const key = getApiKey();
+            if (!key) throw new Error("API Key is required");
+            return new GoogleGenAI({ apiKey: key });
+        };
+
+        async function generatePlan(prompt) {
+            const ai = initAi();
+            const response = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: `Generate a detailed architectural blueprint plan for: "${prompt}". 
+                Return the response as a JSON object with the following structure:
+                {
+                  "title": "Project Title",
+                  "description": "Brief description",
+                  "specifications": ["Spec 1", "Spec 2"],
+                  "elements": [
+                    { "id": "1", "type": "wall", "x1": 100, "y1": 100, "x2": 500, "y2": 100 },
+                    { "id": "2", "type": "label", "x1": 300, "y1": 80, "label": "Main Corridor" }
+                  ],
+                  "notes": ["Note 1", "Note 2"]
+                }
+                Ensure coordinates are within 0-800 range. Types: wall, window, door, label, measure.`,
+                config: {
+                    responseMimeType: "application/json",
+                }
+            });
+
+            return JSON.parse(response.text || '{}');
+        }
+
+        const BlueprintCanvas = ({ plan }) => {
+            if (!plan) return null;
+
+            return React.createElement('div', { className: "w-full h-full min-h-[500px] relative" },
+                React.createElement('svg', { className: "w-full h-full min-h-[500px] bg-void-surface/50 rounded-[32px] border border-white/10" },
+                    React.createElement('defs', null,
+                        React.createElement('pattern', { id: "grid", width: "40", height: "40", patternUnits: "userSpaceOnUse" },
+                            React.createElement('path', { d: "M 40 0 L 0 0 0 40", fill: "none", stroke: "rgba(255,255,255,0.05)", strokeWidth: "1" })
+                        )
+                    ),
+                    React.createElement('rect', { width: "100%", height: "100%", fill: "url(#grid)" }),
+                    React.createElement('g', null,
+                        plan.elements.map((el) => {
+                            if (el.type === 'wall') {
+                                return React.createElement(motion.line, {
+                                    initial: { pathLength: 0 },
+                                    animate: { pathLength: 1 },
+                                    key: el.id,
+                                    x1: el.x1, y1: el.y1, x2: el.x2, y2: el.y2,
+                                    stroke: "#FDE047", strokeWidth: "3", strokeLinecap: "round"
+                                });
+                            }
+                            if (el.type === 'door') {
+                                return React.createElement(motion.path, {
+                                    initial: { pathLength: 0 },
+                                    animate: { pathLength: 1 },
+                                    key: el.id,
+                                    d: `M ${el.x1} ${el.y1} L ${el.x1 + 40} ${el.y1} A 40 40 0 0 1 ${el.x1} ${el.y1 + 40}`,
+                                    fill: "none", stroke: "white", strokeWidth: "1", strokeDasharray: "4 2"
+                                });
+                            }
+                            return null;
+                        })
+                    ),
+                    React.createElement('foreignObject', { width: "100%", height: "100%", className: "pointer-events-none" },
+                        React.createElement('div', { className: "relative w-full h-full p-4" },
+                            plan.elements.map((el) => {
+                                if (el.type === 'label') {
+                                    return React.createElement('div', {
+                                        key: el.id,
+                                        className: "absolute text-[10px] uppercase font-bold text-cyber-yellow bg-void-bg/80 px-2 py-0.5 rounded-full border border-cyber-yellow/20",
+                                        style: { left: el.x1, top: el.y1 }
+                                    }, el.label);
+                                }
+                                return null;
+                            })
+                        )
+                    )
+                )
+            );
+        };
+
+        function App() {
+            const [input, setInput] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [plan, setPlan] = useState(null);
+            const [error, setError] = useState(null);
+
+            const handleGenerate = async () => {
+                if (!input.trim()) return;
+                setLoading(true);
+                setError(null);
+                try {
+                    const result = await generatePlan(input);
+                    setPlan(result);
+                    setTimeout(() => {
+                        document.getElementById('result-section')?.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                } catch (err) {
+                    setError('Failed to draft plan. Check your connection.');
+                    console.error(err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return React.createElement('div', { className: "min-h-screen" },
+                React.createElement('section', { className: "liquid-hero min-h-[85vh] flex flex-col justify-center px-8 md:px-24 pt-20 pb-32" },
+                    React.createElement(motion.div, {
+                        initial: { opacity: 0, y: 30 },
+                        animate: { opacity: 1, y: 0 },
+                        transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] },
+                        className: "max-w-4xl"
+                    },
+                        React.createElement('div', { className: "flex items-center gap-3 mb-8" },
+                            React.createElement('div', { className: "bg-black p-2 rounded-full" },
+                                React.createElement(Compass, { className: "w-6 h-6 text-cyber-yellow" })
+                            ),
+                            React.createElement('span', { className: "text-[10px] uppercase tracking-[0.3em] font-bold" }, "SUNONG")
+                        ),
+                        React.createElement('h1', { className: "text-6xl md:text-8xl font-extrabold tracking-tighter leading-[0.9] mb-12" },
+                            "OBS ", React.createElement('br'),
+                            React.createElement('span', { className: "text-black/40" }, "SURV"), React.createElement('br'),
+                            "SYS."
+                        ),
+                        React.createElement('div', { className: "glass-card p-8 md:p-12 max-w-2xl relative" },
+                            React.createElement('div', { className: "absolute top-6 right-6" },
+                                React.createElement(Sparkles, { className: "w-6 h-6 text-black/20" })
+                            ),
+                            React.createElement('label', { className: "text-[10px] uppercase font-bold mb-4 block opacity-60" }, "monitoring"),
+                            React.createElement('textarea', {
+                                value: input,
+                                onChange: (e) => setInput(e.target.value),
+                                placeholder: "Describe your vision...",
+                                className: "w-full bg-transparent border-none p-0 text-xl md:text-2xl font-medium placeholder:text-black/20 focus:ring-0 resize-none h-24 mb-8"
+                            }),
+                            React.createElement('div', { className: "flex flex-wrap gap-4" },
+                                React.createElement('button', {
+                                    onClick: handleGenerate,
+                                    disabled: loading,
+                                    className: "pill-button pill-button-primary flex items-center gap-3"
+                                },
+                                    loading ? React.createElement(Loader2, { className: "w-5 h-5 animate-spin" }) : React.createElement(PenTool, { className: "w-5 h-5" }),
+                                    loading ? 'DRAFTING...' : 'TO THE MOON'
+                                ),
+                                React.createElement('button', { className: "pill-button border-2 border-black/10 flex items-center gap-2 opacity-60 hover:opacity-100" },
+                                    React.createElement(Layout, { className: "w-4 h-4" }),
+                                    React.createElement('span', { className: "text-sm" }, "TEMPLATES")
+                                )
+                            )
+                        )
+                    )
+                ),
+                React.createElement('div', { className: "liquid-section-divider" }),
+                React.createElement('section', { id: "result-section", className: "px-8 md:px-24 py-32 bg-void-bg" },
+                    React.createElement(AnimatePresence, null,
+                        error && React.createElement(motion.div, {
+                            initial: { opacity: 0, scale: 0.9 },
+                            animate: { opacity: 1, scale: 1 },
+                            className: "glass-card p-6 border-cyber-yellow/50 flex items-center gap-4 max-w-xl mx-auto mb-12"
+                        },
+                            React.createElement(AlertCircle, { className: "w-6 h-6 text-cyber-yellow" }),
+                            React.createElement('p', { className: "text-sm font-medium" }, error)
+                        ),
+                        plan ? React.createElement(motion.div, {
+                            initial: { opacity: 0, y: 50 },
+                            animate: { opacity: 1, y: 0 },
+                            className: "grid lg:grid-cols-3 gap-12 items-start"
+                        },
+                            React.createElement('div', { className: "lg:col-span-2 space-y-8" },
+                                React.createElement('div', { className: "flex justify-between items-end" },
+                                    React.createElement('div', null,
+                                        React.createElement('span', { className: "text-[10px] uppercase tracking-widest text-cyber-yellow font-bold mb-2 block" }, "Visualization"),
+                                        React.createElement('h2', { className: "text-4xl font-bold tracking-tight uppercase" }, plan.title)
+                                    ),
+                                    React.createElement('div', { className: "flex gap-2" },
+                                        React.createElement('button', { className: "p-3 bg-void-surface rounded-full hover:bg-void-accent transition-colors" },
+                                            React.createElement(Maximize2, { className: "w-5 h-5" })
+                                        )
+                                    )
+                                ),
+                                React.createElement('div', { className: "glass-card p-4 overflow-hidden" },
+                                    React.createElement(BlueprintCanvas, { plan: plan })
+                                )
+                            ),
+                            React.createElement('div', { className: "space-y-8" },
+                                React.createElement('div', { className: "glass-card p-8" },
+                                    React.createElement('span', { className: "text-[10px] uppercase tracking-widest text-cyber-yellow font-bold mb-6 block" }, "Specifications"),
+                                    React.createElement('ul', { className: "space-y-4" },
+                                        plan.specifications.map((spec, i) => React.createElement('li', { key: i, className: "flex items-start gap-3 group" },
+                                            React.createElement('div', { className: "mt-1.5 w-1.5 h-1.5 rounded-full bg-cyber-yellow group-hover:scale-150 transition-transform" }),
+                                            React.createElement('span', { className: "text-sm opacity-80 leading-relaxed" }, spec)
+                                        ))
+                                    )
+                                ),
+                                React.createElement('div', { className: "bg-void-surface p-8 rounded-[32px] border border-white/5" },
+                                    React.createElement('span', { className: "text-[10px] uppercase tracking-widest opacity-40 font-bold mb-4 block" }, "Architect's Note"),
+                                    React.createElement('p', { className: "text-sm leading-relaxed opacity-60 italic" }, `"${plan.description}"`)
+                                ),
+                                React.createElement('button', { className: "pill-button pill-button-yellow w-full flex items-center justify-center gap-3" },
+                                    React.createElement('span', null, "EXPORT BLUEPRINT"),
+                                    React.createElement(ArrowRight, { className: "w-4 h-4" })
+                                )
+                            )
+                        ) : React.createElement('div', { className: "text-center py-20 opacity-20" },
+                            React.createElement(MousePointer2, { className: "w-12 h-12 mx-auto mb-4 animate-bounce" }),
+                            React.createElement('p', { className: "text-xl font-bold uppercase tracking-widest" }, "Awaiting Command")
+                        )
+                    )
+                ),
+                React.createElement('footer', { className: "px-8 md:px-24 py-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-8 opacity-40" },
+                    React.createElement('div', { className: "text-[10px] font-bold tracking-widest uppercase" }, "Fluid Arch AI © 2026"),
+                    React.createElement('div', { className: "flex gap-8 text-[10px] font-bold tracking-widest uppercase" },
+                        React.createElement('a', { href: "#", className: "hover:text-cyber-yellow transition-colors" }, "Privacy"),
+                        React.createElement('a', { href: "#", className: "hover:text-cyber-yellow transition-colors" }, "Terms"),
+                        React.createElement('a', { href: "#", className: "hover:text-cyber-yellow transition-colors" }, "Contact")
+                    )
+                )
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
+</body>
+</html>
