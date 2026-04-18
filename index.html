@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>SUNONG Mobile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap');
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background-color: #0a0a0c; color: #cbd5e1; padding-bottom: 70px; overflow-x: hidden; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .hide { display: none !important; }
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
+        
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #0d0e12; border-top: 1px solid rgba(255,255,255,0.1); z-index: 50; display: flex; justify-content: space-around; padding: 5px 0; padding-bottom: env(safe-area-inset-bottom); }
+        .bottom-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #64748b; padding: 6px 12px; font-size: 10px; gap: 3px; transition: all 0.2s; border-radius: 8px; position: relative; }
+        .bottom-nav button.active { color: #10b981; }
+        .bottom-nav button.active::before { content: ''; position: absolute; top: -5px; left: 50%; transform: translateX(-50%); width: 30px; height: 3px; background: #10b981; border-radius: 0 0 4px 4px; }
+        
+        .m-card { background: #111318; border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 12px; margin-bottom: 8px; transition: all 0.2s; }
+        .m-card.positive { border-left: 4px solid #10b981; }
+        .m-card.negative { border-left: 4px solid #ef4444; }
+        
+        .dom-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 4px; align-items: center; font-size: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03); position: relative; }
+        .dom-bar-bid { position: absolute; right: 0; top: 0; bottom: 0; background: rgba(16, 185, 129, 0.1); pointer-events: none; }
+        .dom-bar-ask { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(239, 68, 68, 0.1); pointer-events: none; }
+        .chart-tf-btn.active { background-color: #2962ff !important; color: white !important; }
+        
+        .log-box { background: #000; height: 150px; overflow-y: auto; padding: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10px; border-top: 1px solid #333; white-space: pre-wrap; word-break: break-all; color: #94a3b8; }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="bg-[#0d0e12] border-b border-white/10 p-3 sticky top-0 z-40">
+        <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+                <div id="connection-dot" class="w-2 h-2 rounded-full bg-slate-500"></div>
+                <span id="status-text" class="text-xs font-bold text-slate-400">DISCONNECTED</span>
+            </div>
+            <span id="contract-count" class="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-400">0</span>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="window.toggleConnection()" id="connect-btn" class="flex-1 flex items-center justify-center gap-1 py-2.5 bg-emerald-500 text-black text-xs font-bold rounded-lg active:scale-95">
+                <i data-lucide="power" class="w-3.5 h-3.5"></i> CONNECT
+            </button>
+            <button onclick="window.subscribeAll()" id="sub-btn" disabled class="flex-1 flex items-center justify-center gap-1 py-2.5 bg-blue-600 disabled:bg-slate-700 text-white text-xs font-bold rounded-lg active:scale-95">
+                <i data-lucide="radio" class="w-3.5 h-3.5"></i> SUB ALL
+            </button>
+        </div>
+    </header>
+
+    <main class="min-h-screen">
+        
+        <!-- VIEW: CONFIG (MOBILE RESPONSIVE) -->
+        <div id="view-config" class="p-4 hide">
+            <div class="text-sm font-bold text-white mb-4">Proxy & FIX Settings</div>
+            <div class="bg-[#111318] border border-white/10 rounded-xl p-4 space-y-3">
+                <div class="bg-black/30 p-2 rounded text-[10px] text-amber-400 border border-amber-500/20">
+                    ⚠️ Pastikan EXE Proxy sudah berjalan di Laptop, dan Laptop sama WiFi dengan HP ini.
+                </div>
+                <div><label class="text-[10px] text-slate-500 block mb-1">Proxy IP Laptop (Contoh: 192.168.1.5)</label><input type="text" id="cfg-proxy-ip" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2.5 text-sm font-mono text-white outline-none focus:border-emerald-500" placeholder="192.168.1.5"></div>
+                <div><label class="text-[10px] text-slate-500 block mb-1">Proxy Port</label><input type="number" id="cfg-proxy-port" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2.5 text-sm font-mono text-white outline-none" value="8080"></div>
+                <div class="border-t border-white/10 pt-3 mt-3">
+                    <div><label class="text-[10px] text-slate-500 block mb-1">Target FIX Server (Dari Config EXE)</label><input type="text" id="cfg-target" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2.5 text-sm font-mono text-white outline-none" value="ETPMDGW"></div>
+                    <div><label class="text-[10px] text-slate-500 block mb-1">Sender CompID</label><input type="text" id="cfg-sender" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2.5 text-sm font-mono text-white outline-none" placeholder="1003_TFCM"></div>
+                </div>
+                <div class="border-t border-white/10 pt-3 mt-3">
+                    <div><label class="text-[10px] text-emerald-500 block mb-1">Broker (9001)</label><input type="text" id="cfg-broker" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2.5 text-sm font-mono text-white outline-none" placeholder="1003"></div>
+                    <div><label class="text-[10px] text-blue-500 block mb-1">Account (1)</label><input type="text" id="cfg-account" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2.5 text-sm font-mono text-white outline-none" placeholder="TFCM"></div>
+                    <div><label class="text-[10px] text-rose-500 block mb-1">Password (554)</label><input type="password" id="cfg-password" class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2.5 text-sm font-mono text-white outline-none" placeholder="****"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: MONITOR -->
+        <div id="view-monitor" class="p-3">
+            <div id="monitor-grid" class="grid grid-cols-2 gap-2 font-mono">
+                <div class="col-span-2 text-center text-slate-600 mt-16 text-sm">Menunggu data...</div>
+            </div>
+        </div>
+
+        <!-- VIEW: MARKET -->
+        <div id="view-market" class="p-3 hide">
+            <div id="market-list" class="space-y-2"><div class="text-center text-slate-600 mt-16 text-sm">Belum ada data.</div></div>
+        </div>
+
+        <!-- VIEW: CHART -->
+        <div id="view-chart" class="flex flex-col hide" style="height: calc(100vh - 120px);">
+            <div class="bg-[#131722] p-2 flex items-center gap-2 border-b border-[#2a2e39] overflow-x-auto">
+                <select id="chart-symbol-select" onchange="window.changeChartSymbol(this.value)" class="bg-[#2a2e39] border border-[#363a45] rounded px-2 py-1.5 text-xs font-mono text-white outline-none w-24"><option value="">Symbol</option></select>
+                <div class="flex bg-[#2a2e39] rounded p-0.5 gap-0.5">
+                    <button onclick="setChartType('candle')" id="btn-candle" class="chart-tf-btn active px-2 py-1 text-[10px] rounded">Candle</button>
+                    <button onclick="setChartType('line')" id="btn-line" class="chart-tf-btn px-2 py-1 text-[10px] rounded">Line</button>
+                    <button onclick="setChartType('bar')" id="btn-bar" class="chart-tf-btn px-2 py-1 text-[10px] rounded">Bar</button>
+                </div>
+                <div class="flex gap-0.5">
+                    <button onclick="setTimeframe('1m')" id="tf-1m" class="chart-tf-btn active px-2 py-1 text-[10px] bg-[#2a2e39] rounded">1m</button>
+                    <button onclick="setTimeframe('15m')" id="tf-15m" class="chart-tf-btn px-2 py-1 text-[10px] bg-[#2a2e39] rounded">15m</button>
+                    <button onclick="setTimeframe('1h')" id="tf-1h" class="chart-tf-btn px-2 py-1 text-[10px] bg-[#2a2e39] rounded">1H</button>
+                    <button onclick="setTimeframe('1D')" id="tf-1D" class="chart-tf-btn px-2 py-1 text-[10px] bg-[#2a2e39] rounded">1D</button>
+                </div>
+                <button onclick="chart.timeScale().fitContent()" class="px-2 py-1 text-[10px] bg-[#2a2e39] rounded ml-auto">Fit</button>
+            </div>
+            <div id="chart-wrapper" class="flex-1 bg-[#131722]"><div id="chart-container"></div></div>
+        </div>
+
+        <!-- VIEW: DOM -->
+        <div id="view-dom" class="p-3 hide">
+            <select id="dom-symbol-select" onchange="window.selectDOMSymbol(this.value)" class="w-full bg-[#111318] border border-white/10 rounded-lg px-3 py-3 text-sm font-mono text-white outline-none mb-3"><option value="">-- Pilih Kontrak --</option></select>
+            <div class="border border-white/10 rounded-xl bg-black/20 overflow-hidden">
+                <div class="dom-row p-2 border-b border-white/10 bg-white/[0.02] font-bold text-[10px] text-slate-500 uppercase"><div class="text-center text-emerald-400">BID QTY</div><div class="text-center">BID PX</div><div class="text-center">ASK PX</div><div class="text-center text-rose-400">ASK QTY</div></div>
+                <div id="dom-body" class="min-h-[300px]"><div class="text-center text-slate-600 mt-16 text-sm">Pilih kontrak</div></div>
+            </div>
+        </div>
+
+        <!-- VIEW: TRADES -->
+        <div id="view-trades" class="p-3 hide">
+            <div id="trades-body" class="space-y-2"><div class="text-center text-slate-600 mt-16 text-sm">Menunggu eksekusi...</div></div>
+        </div>
+
+        <!-- VIEW: LOGS -->
+        <div id="view-logs" class="p-3 hide">
+            <div class="text-xs font-bold text-slate-400 mb-2 uppercase">Connection Logs</div>
+            <div id="logs-container" class="log-box bg-black rounded-lg p-2 text-[10px]"></div>
+        </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <button onclick="switchTab('config')" id="nav-config"><i data-lucide="settings" class="w-5 h-5"></i><span>Config</span></button>
+        <button onclick="switchTab('monitor')" id="nav-monitor" class="active"><i data-lucide="layout-grid" class="w-5 h-5"></i><span>Monitor</span></button>
+        <button onclick="switchTab('market')" id="nav-market"><i data-lucide="list" class="w-5 h-5"></i><span>Market</span></button>
+        <button onclick="switchTab('chart')" id="nav-chart"><i data-lucide="candlestick-chart" class="w-5 h-5"></i><span>Chart</span></button>
+        <button onclick="switchTab('dom')" id="nav-dom"><i data-lucide="layers" class="w-5 h-5"></i><span>DOM</span></button>
+        <button onclick="switchTab('trades')" id="nav-trades"><i data-lucide="scroll-text" class="w-5 h-5"></i><span>Trades</span></button>
+        <button onclick="switchTab('logs')" id="nav-logs"><i data-lucide="terminal" class="w-5 h-5"></i><span>Logs</span></button>
+    </div>
+
+    <script>
+        const state = { connected: false, seqNum: 1, marketData: {}, activeDOM: null, contractOrder: [] };
+        window.state = state;
+        let wsConnection = null;
+        let heartbeatTimer = null;
+        let currentSubscribeReqId = null;
+        let securityListTimeout = null;
+        
+        // --- CHART VARIABLES ---
+        let chart, candleSeries, lineSeries, barSeries, maSeries, chartInitialized = false, currentChartType = 'candle', currentTimeframe = '1m', currentChartSymbol = null;
+        function getPrecision(symbol) { if (!symbol) return 2; if (symbol.includes('NSI')) return 3; if (symbol.includes('NCP')) return 4; if (symbol.includes('NPT')) return 1; return 2; }
+        function extractRepeatingTags(fixStr, tagId) { const values = []; const parts = fixStr.split('|'); parts.forEach(p => { if (p.startsWith(tagId + '=')) values.push(p.substring(tagId.length + 1)); }); return values; }
+        const pad = n => n.toString().padStart(2, '0');
+        function getUTCTime() { const d = new Date(); return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`; }
+        
+        function constructFixMsg(msgType, tags) { 
+            const s = document.getElementById('cfg-sender').value; 
+            const t = document.getElementById('cfg-target').value; 
+            const time = getUTCTime(); 
+            const sq = state.seqNum; 
+            let b = `35=${msgType}|49=${s}|56=${t}|34=${sq}|52=${time}|`; 
+            if (tags) tags.forEach(t => b += `${t[0]}=${t[1]}|`); 
+            const l = b.length; 
+            state.seqNum++; 
+            return `8=FIX.4.4|9=${l}|${b}`; 
+        }
+        
+        function addLog(type, msg) { 
+            const el = document.getElementById('logs-container'); 
+            if(!el) return;
+            const time = new Date().toLocaleTimeString(); 
+            const color = type === 'OUT' ? 'color: #fbbf24' : (type === 'IN' ? 'color: #22d3ee' : 'color: #94a3b8'); 
+            el.innerHTML += `<div style="${color}">[${time}] ${type}: ${msg}</div>`; 
+            el.scrollTop = el.scrollHeight; 
+        }
+
+        // --- MOBILE TAB NAVIGATION ---
+        function switchTab(tab) {
+            ['config', 'monitor', 'market', 'chart', 'dom', 'trades', 'logs'].forEach(v => {
+                document.getElementById(`view-${v}`).classList.add('hide');
+                document.getElementById(`nav-${v}`).classList.remove('active');
+            });
+            document.getElementById(`view-${tab}`).classList.remove('hide');
+            document.getElementById(`nav-${tab}`).classList.add('active');
+            if(tab === 'chart') {
+                setTimeout(() => {
+                    initChart();
+                    if(chart) { const container = document.getElementById('chart-container'); const rect = container.getBoundingClientRect(); chart.applyOptions({ width: rect.width, height: rect.height }); chart.timeScale().fitContent(); }
+                }, 150);
+            }
+            lucide.createIcons();
+        }
+
+        // --- REAL CONNECTION (NO SIMULATION) ---
+        function startHeartbeat(intervalSeconds) {
+            stopHeartbeat();
+            heartbeatTimer = setInterval(() => {
+                if (wsConnection && wsConnection.readyState === WebSocket.OPEN && state.connected) {
+                    sendToServer(constructFixMsg('0', [['112', Math.floor(Date.now() / 1000)]]));
+                }
+            }, intervalSeconds * 1000);
+        }
+        function stopHeartbeat() { if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; } }
+
+        window.toggleConnection = function() { 
+            if (wsConnection && wsConnection.readyState === WebSocket.OPEN) { 
+                wsConnection.close(); 
+                updateUI(false); 
+                return; 
+            } 
+            
+            const proxyIp = document.getElementById('cfg-proxy-ip').value;
+            const proxyPort = document.getElementById('cfg-proxy-port').value;
+            
+            if (!proxyIp) { addLog("ERROR", "IP Proxy Laptop belum diisi!"); return; }
+            
+            updateUI(true, "Connecting...");
+            addLog("SYSTEM", `Menghubungkan ke Proxy ${proxyIp}:${proxyPort}...`); 
+            
+            // Simpan config ke localStorage HP
+            const config = { proxyIp, proxyPort, target: document.getElementById('cfg-target').value, sender: document.getElementById('cfg-sender').value, broker: document.getElementById('cfg-broker').value, account: document.getElementById('cfg-account').value, password: document.getElementById('cfg-password').value };
+            localStorage.setItem('sunong_mobile_config', JSON.stringify(config));
+            
+            try {
+                wsConnection = new WebSocket(`ws://${proxyIp}:${proxyPort}`);
+                
+                wsConnection.onopen = () => {
+                    addLog("SYSTEM", "Terhubung ke Proxy Laptop!");
+                    const logonMsg = constructFixMsg('A', [
+                        ['98', '0'], ['108', '30'], ['141', 'Y'], 
+                        ['9001', document.getElementById('cfg-broker').value], 
+                        ['1', document.getElementById('cfg-account').value], 
+                        ['554', document.getElementById('cfg-password').value]
+                    ]);
+                    
+                    // Mengirim perintah Connect ke EXE Proxy
+                    wsConnection.send(JSON.stringify({ 
+                        type: 'CONNECT', 
+                        host: document.getElementById('cfg-target').value.includes('.') ? document.getElementById('cfg-target').value : '', 
+                        port: 50218, // Port bursa biasanya 50218
+                        logonMsg: logonMsg 
+                    }));
+                };
+                
+                wsConnection.onmessage = (event) => { 
+                    const data = JSON.parse(event.data); 
+                    if (data.type === 'FIX_MESSAGE') { 
+                        addLog("IN", data.payload); 
+                        processIncomingMessage(data.payload); 
+                    } else if (data.type === 'STATUS') { 
+                        addLog("SYSTEM", `Proxy: ${data.status}`); 
+                        if (data.status === 'DISCONNECTED') { updateUI(false, "Terputus dari Proxy"); } 
+                    } else if (data.type === 'ERROR') { 
+                        addLog("ERROR", data.message); 
+                        updateUI(false, `Error: ${data.message}`); 
+                    } 
+                };
+                
+                wsConnection.onclose = () => { 
+                    stopHeartbeat(); 
+                    updateUI(false, "Koneksi Terputus"); 
+                }; 
+                
+                wsConnection.onerror = () => { 
+                    addLog("ERROR", "Gagal sambung ke Proxy! Pastikan EXE berjalan & IP benar."); 
+                    updateUI(false, "Gagal Sambung"); 
+                };
+                
+                // Timeout 15 detik
+                setTimeout(() => {
+                    if (wsConnection.readyState !== WebSocket.OPEN) {
+                        addLog("ERROR", "Timeout 15 detik.");
+                        updateUI(false, "Timeout");
+                        wsConnection.close();
+                    }
+                }, 15000);
+                
+            } catch(e) {
+                addLog("ERROR", "Error membuat WebSocket: " + e.message);
+            }
+        };
+
+        window.subscribeAll = function() { 
+            if (!state.connected) { addLog("ERROR", "Belum konek!"); return; }
+            addLog("SYSTEM", "Mengirim permintaan SUBSCRIBE ALL...");
+            currentSubscribeReqId = "SEC_LIST_" + Date.now();
+            sendToServer(constructFixMsg('x', [['320', currentSubscribeReqId], ['559', '4']]));
+            
+            // Fallback jika server tidak support daftar kontrak
+            securityListTimeout = setTimeout(() => { 
+                addLog("SYSTEM", "Timeout, lakukan fallback...");
+                currentSubscribeReqId = "MD_FALLBACK_" + Date.now();
+                sendToServer(constructFixMsg('R', [['131', currentSubscribeReqId]]));
+            }, 5000);
+        };
+
+        function sendToServer(msg) { 
+            if (wsConnection && wsConnection.readyState === WebSocket.OPEN) { 
+                wsConnection.send(JSON.stringify({ type: 'SEND_FIX', payload: msg })); 
+                addLog("OUT", msg); 
+            } else { 
+                addLog("ERROR", "Tidak bisa kirim, WebSocket tidak terbuka."); 
+            } 
+        }
+
+        function updateUI(connected, text) { 
+            state.connected = connected; 
+            const btn = document.getElementById('connect-btn'); 
+            const dot = document.getElementById('connection-dot'); 
+            const statusText = document.getElementById('status-text'); 
+            const subBtn = document.getElementById('sub-btn'); 
+            
+            if (connected) { 
+                btn.innerHTML = '<i data-lucide="power" class="w-3.5 h-3.5"></i> DISCONNECT'; 
+                btn.className = "flex-1 flex items-center justify-center gap-1 py-2.5 bg-rose-500 text-white text-xs font-bold rounded-lg active:scale-95"; 
+                statusText.innerText = text || "Connecting..."; 
+                statusText.className = "text-xs font-bold text-amber-400"; 
+                dot.className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse"; 
+                subBtn.disabled = false; 
+                startHeartbeat(30); 
+            } else { 
+                btn.innerHTML = '<i data-lucide="power" class="w-3.5 h-3.5"></i> CONNECT'; 
+                btn.className = "flex-1 flex items-center justify-center gap-1 py-2.5 bg-emerald-500 text-black text-xs font-bold rounded-lg active:scale-95"; 
+                statusText.innerText = text || "DISCONNECTED"; 
+                statusText.className = "text-xs font-bold text-slate-400"; 
+                dot.className = "w-2 h-2 rounded-full bg-slate-500"; 
+                subBtn.disabled = true; 
+                stopHeartbeat(); 
+                if (securityListTimeout) { clearTimeout(securityListTimeout); securityListTimeout = null; } 
+            } 
+            lucide.createIcons(); 
+        }
+
+        function processIncomingMessage(fixStr) { 
+            const tags = {}; 
+            fixStr.split('|').forEach(p => { const eq = p.indexOf('='); if (eq > -1) tags[p.substring(0, eq)] = p.substring(eq + 1); }); 
+            const msgType = tags['35']; 
+            
+            if (msgType === 'A') { 
+                updateUI(true, "LOGGED IN!"); 
+                addLog("SYSTEM", ">>> LOGON SUCCESS! Mengirim Subscribe..."); 
+                setTimeout(() => { window.subscribeAll(); }, 1000); 
+            } 
+            
+            if (msgType === 'y') { 
+                if (securityListTimeout) { clearTimeout(securityListTimeout); securityListTimeout = null; } 
+                addLog("SYSTEM", "Menerima daftar kontrak dari Proxy."); 
+                handleSecurityList(fixStr); 
+            }
+            
+            if (msgType === '1') { 
+                // Heartbeat dari server
+                sendToServer(constructFixMsg('0', [['112', tags['112']]])); 
+            } 
+            
+            if (msgType === 'S' && tags['355']) { 
+                try { 
+                    const json = JSON.parse(tags['355']); 
+                    processMarketData(json); 
+                } catch(e) { addLog("ERROR", "Gagal parse data JSON: " + e.message); } 
+            } 
+            
+            if (msgType === 'AE') { 
+                const t = { symbol: tags['55'], qty: tags['32'], price: tags['31'], side: tags['54'], time: tags['60'] }; 
+                renderTrade(t); 
+            } 
+            
+            if (msgType === '5') { 
+                addLog("ERROR", "REJECTED LOGOUT!"); 
+                updateUI(false, "Ditolak Server"); 
+            } 
+        }
+
+        function handleSecurityList(fixStr) {
+            const symbols = extractRepeatingTags(fixStr, '55');
+            if (symbols.length > 0) { 
+                addLog("SYSTEM", `Ditemukan ${symbols.length} kontrak. Subscribe batch...`);
+                subscribeToSymbols(symbols); 
+            } else { 
+                addLog("SYSTEM", "Tidak ada list, lakukan fallback langsung...");
+                currentSubscribeReqId = "MD_FALLBACK_" + Date.now();
+                sendToServer(constructFixMsg('R', [['131', currentSubscribeReqId]]));
+            }
+        }
+
+        function subscribeToSymbols(symbols) {
+            if (!state.connected || symbols.length === 0) return;
+            const batchSize = 100; let delay = 0;
+            for (let i = 0; i < symbols.length; i += batchSize) {
+                const batch = symbols.slice(i, i + batchSize);
+                setTimeout(() => {
+                    currentSubscribeReqId = `MD_BATCH_${i}_${Date.now()}`;
+                    const tags = [['131', currentSubscribeReqId], ['146', batch.length.toString()]];
+                    batch.forEach(sym => tags.push(['55', sym]));
+                    sendToServer(constructFixMsg('R', tags));
+                }, delay);
+                delay += 500;
+            }
+        }
+
+        function processMarketData(data) { 
+            if (!data.code) return; 
+            const d = data.data || []; 
+            const p = { day: d[0] || '-', time: d[1] || '-', last: parseFloat(d[2]) || 0, preSettle: parseFloat(d[3]) || 0, preClose: parseFloat(d[4]) || 0, open: parseFloat(d[5]) || 0, high: parseFloat(d[6]) || 0, low: parseFloat(d[7]) || 0, vol: parseInt(d[8]) || 0, oi: parseInt(d[9]) || 0, close: parseFloat(d[10]) || 0, settle: parseFloat(d[11]) || 0, limitUp: parseFloat(d[12]) || 0, limitDown: parseFloat(d[13]) || 0 }; 
+            const bids = [], asks = []; 
+            if (data.bidprice) for(let i=0; i<data.bidprice.length; i++) bids.push({ price: parseFloat(data.bidprice[i]), qty: parseInt(data.bidqty[i]) }); 
+            if (data.askprice) for(let i=0; i<data.askprice.length; i++) asks.push({ price: parseFloat(data.askprice[i]), qty: parseInt(data.askqty[i]) }); 
+            
+            state.marketData[data.code] = { ...p, bids, asks }; 
+            if (!state.contractOrder.includes(data.code)) state.contractOrder.push(data.code); 
+            
+            renderMobileCard(data.code, state.marketData[data.code]); 
+            renderMobileMarketRow(data.code, state.marketData[data.code]); 
+            if (state.activeDOM === data.code) renderDOMBody(data.code, state.marketData[data.code]); 
+            updateSymbolSelector(data.code); 
+            
+            const countEl = document.getElementById('contract-count');
+            if (countEl) countEl.innerText = Object.keys(state.marketData).length; 
+        }
+
+        function updateSymbolSelector(s) { 
+            const sel = document.getElementById('dom-symbol-select'); let ex = false; for (let i = 0; i < sel.options.length; i++) if (sel.options[i].value === s) ex = true; if (!ex) { const o = document.createElement('option'); o.value = s; o.innerText = s; sel.appendChild(o); } 
+            const chartSel = document.getElementById('chart-symbol-select'); let exC = false; for (let i = 0; i < chartSel.options.length; i++) if (chartSel.options[i].value === s) exC = true; if (!exC) { const o = document.createElement('option'); o.value = s; o.innerText = s; chartSel.appendChild(o); }
+        }
+
+        // --- UI RENDER FUNCTIONS ---
+        function renderMobileCard(symbol, d) {
+            const c = document.getElementById('monitor-grid'); 
+            if(c.querySelector('.text-center')) c.innerHTML = '';
+            let card = document.getElementById(`mcard-${symbol}`); 
+            if (!card) { card = document.createElement('div'); card.id = `mcard-${symbol}`; card.className = "m-card cursor-pointer"; card.onclick = () => { switchTab('dom'); document.getElementById('dom-symbol-select').value = symbol; window.selectDOMSymbol(symbol); }; c.appendChild(card); } 
+            const chg = d.last - d.preSettle; const pct = d.preSettle !== 0 ? (chg / d.preSettle) * 100 : 0; 
+            const isPos = chg >= 0; const b = d.bids[0] || { price: 0, qty: 0 }; const a = d.asks[0] || { price: 0, qty: 0 }; const prec = getPrecision(symbol);
+            card.className = `m-card cursor-pointer ${isPos ? 'positive' : 'negative'}`;
+            card.innerHTML = `<div class="flex justify-between items-center mb-1"><span class="text-white text-xs font-bold">${symbol}</span><span class="text-[10px] font-bold ${isPos ? 'text-emerald-400' : 'text-rose-400'}">${isPos?'+':''}${pct.toFixed(2)}%</span></div><div class="text-lg font-bold text-white mb-1">${d.last.toFixed(prec)}</div><div class="flex gap-2 text-[10px]"><div class="flex-1 bg-black/20 p-1.5 rounded text-center"><div class="text-emerald-400">BID</div><div class="font-bold">${b.price.toFixed(prec)}</div><div class="text-slate-500">${b.qty}</div></div><div class="flex-1 bg-black/20 p-1.5 rounded text-center"><div class="text-rose-400">ASK</div><div class="font-bold">${a.price.toFixed(prec)}</div><div class="text-slate-500">${a.qty}</div></div></div>`;
+        }
+
+        function renderMobileMarketRow(symbol, d) {
+            const list = document.getElementById('market-list'); 
+            if(list.querySelector('.text-center')) list.innerHTML = '';
+            let card = document.getElementById(`mrow-${symbol}`); 
+            if (!card) { card = document.createElement('div'); card.id = `mrow-${symbol}`; card.className = "m-card cursor-pointer"; card.onclick = () => { switchTab('dom'); document.getElementById('dom-symbol-select').value = symbol; window.selectDOMSymbol(symbol); }; list.appendChild(card); } 
+            const chg = d.last - d.preSettle; const isPos = chg >= 0; const prec = getPrecision(symbol); const topBid = d.bids[0] || { price: 0 }; const topAsk = d.asks[0] || { price: 0 };
+            card.className = `m-card cursor-pointer ${isPos ? 'positive' : 'negative'}`;
+            card.innerHTML = `<div class="flex justify-between items-start mb-2"><div><div class="text-sm font-bold text-white">${symbol}</div><div class="text-[10px] text-slate-500">${d.time}</div></div><div class="text-right"><div class="text-lg font-bold text-white">${d.last.toFixed(prec)}</div><div class="text-xs font-bold ${isPos ? 'text-emerald-400' : 'text-rose-400'}">${isPos?'+':''}${chg.toFixed(prec)}</div></div></div><div class="grid grid-cols-2 gap-2 text-[10px]"><div class="flex justify-between"><span class="text-slate-500">Vol</span><span class="font-mono">${d.vol.toLocaleString()}</span></div><div class="flex justify-between"><span class="text-slate-500">High</span><span class="font-mono text-emerald-400">${d.high.toFixed(prec)}</span></div><div class="flex justify-between"><span class="text-slate-500">Low</span><span class="font-mono text-rose-400">${d.low.toFixed(prec)}</span></div><div class="flex justify-between"><span class="text-slate-500">Bid</span><span class="font-mono text-emerald-400">${topBid.price > 0 ? topBid.price.toFixed(prec) : '-'}</span></div><div class="flex justify-between"><span class="text-slate-500">Ask</span><span class="font-mono text-rose-400">${topAsk.price > 0 ? topAsk.price.toFixed(prec) : '-'}</span></div><div class="flex justify-between"><span class="text-slate-500">L.Up</span><span class="font-mono text-amber-400">${d.limitUp.toFixed(prec)}</span></div></div>`;
+        }
+
+        window.selectDOMSymbol = function(s) { state.activeDOM = s; if (s && state.marketData[s]) renderDOMBody(s, state.marketData[s]); else document.getElementById('dom-body').innerHTML = '<div class="text-center text-slate-600 mt-16 text-sm">Pilih kontrak</div>'; };
+
+        function renderDOMBody(sym, d) { 
+            const c = document.getElementById('dom-body'); 
+            let mq = 1; d.bids.forEach(b => { if(b.qty > mq) mq = b.qty; }); d.asks.forEach(a => { if(a.qty > mq) mq = a.qty; }); 
+            let h = ""; const prec = getPrecision(sym); 
+            for (let i = d.asks.length - 1; i >= 0; i--) { const a = d.asks[i]; const w = (a.qty/mq)*100; h += `<div class="dom-row relative"><div class="dom-bar-ask" style="width:${w}%"></div><div></div><div></div><div class="text-center text-rose-400 font-bold z-10">${a.price.toFixed(prec)}</div><div class="text-right text-slate-400 z-10 pr-2">${a.qty.toLocaleString()}</div></div>`; } 
+            const sp = (d.asks[0] && d.bids[0]) ? (d.asks[0].price - d.bids[0].price).toFixed(prec) : "0.00"; 
+            h += `<div class="dom-row bg-white/[0.05] py-3 border-y border-white/10 font-bold text-xs text-amber-400">SPREAD: ${sp}</div>`; 
+            for (let i = 0; i < d.bids.length; i++) { const b = d.bids[i]; const w = (b.qty/mq)*100; h += `<div class="dom-row relative"><div class="dom-bar-bid" style="width:${w}%"></div><div class="text-left text-slate-400 z-10 pl-2">${b.qty.toLocaleString()}</div><div class="text-center text-emerald-400 font-bold z-10">${b.price.toFixed(prec)}</div><div></div></div>`; } 
+            c.innerHTML = h; 
+        }
+
+        function renderTrade(t) { 
+            const c = document.getElementById('trades-body'); 
+            if(c.querySelector('.text-center'))c.innerHTML=''; 
+            const s = t.side==='1'?'BUY':'SELL'; const cl = t.side==='1'?'border-emerald-500/30 text-emerald-400':'border-rose-500/30 text-rose-400'; 
+            const card = document.createElement('div'); 
+            card.className = `p-3 bg-white/[0.02] border rounded-lg ${cl}`; 
+            card.innerHTML = `<div class="flex justify-between items-center border-b border-white/5 pb-2 mb-2"><span class="font-bold text-sm">${t.symbol}</span><span class="text-[10px] font-mono text-slate-500">${t.time}</span></div><div class="flex justify-between items-center"><span class="text-lg font-bold">${s}</span><span class="font-mono">${parseFloat(t.price).toFixed(2)} x ${t.qty}</span></div>`; 
+            c.prepend(card); 
+        }
+
+        // --- CHART LOGIC ---
+        function initChart() {
+            if (chartInitialized) return;
+            const container = document.getElementById('chart-container');
+            const rect = container.getBoundingClientRect();
+            chart = LightweightCharts.createChart(container, {
+                width: rect.width, height: rect.height,
+                layout: { background: { type: 'solid', color: '#131722' }, textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                timeScale: { borderColor: '#2a2e39', timeVisible: true, secondsVisible: false },
+            });
+            candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderDownColor: '#ef5350', borderUpColor: '#26a69a', wickDownColor: '#ef5350', wickUpColor: '#26a69a' });
+            lineSeries = chart.addLineSeries({ color: '#2962ff', lineWidth: 2, visible: false });
+            barSeries = chart.addBarSeries({ upColor: '#26a69a', downColor: '#ef5350', visible: false });
+            maSeries = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1 });
+            new ResizeObserver(entries => { if (entries.length === 0) return; const newRect = entries[0].contentRect; chart.applyOptions({ width: newRect.width, height: newRect.height }); }).observe(container);
+            chartInitialized = true;
+            loadChartData('DUMMY', '1m');
+        }
+
+        function getSec(tf) { switch(tf) { case '1m': return 60; case '15m': return 900; case '1h': return 3600; case '1D': return 86400; default: return 60; } }
+        function generateData(count, sec) { const data = []; let time = Math.floor(Date.now() / 1000) - (count * sec); let price = 5000 - (count * 5); for (let i = 0; i < count; i++) { const t = time + (i * sec); const vol = price * 0.005 * (Math.random() - 0.5); const open = price; const close = price + vol; data.push({ time: t, open, high: Math.max(open, close) + Math.random() * 5, low: Math.min(open, close) - Math.random() * 5, close }); price = close; } return data; }
+        function calcMa(data, p) { const ma = []; for(let i=0; i<data.length; i++){ if(i<p-1) continue; let sum = 0; for(let j=0; j<p; j++) sum += data[i-j].close; ma.push({ time: data[i].time, value: sum/p }); } return ma; }
+
+        window.changeChartSymbol = function(sym) { if(!sym) return; currentChartSymbol = sym; loadChartData(sym, currentTimeframe); };
+        window.setTimeframe = function(tf) { currentTimeframe = tf; if(chart && currentChartSymbol) loadChartData(currentChartSymbol, tf); document.querySelectorAll('.chart-tf-btn').forEach(b => b.classList.remove('active')); document.getElementById(`tf-${tf}`).classList.add('active'); };
+        window.setChartType = function(type) { if(!chart) return; candleSeries.applyOptions({ visible: type === 'candle' }); lineSeries.applyOptions({ visible: type === 'line' }); barSeries.applyOptions({ visible: type === 'bar' }); document.querySelectorAll('.chart-tf-btn').forEach(b => b.classList.remove('active')); document.getElementById(`btn-${type}`).classList.add('active'); };
+
+        function loadChartData(symbol, tf) {
+            if(state.marketData && state.marketData[symbol]) {
+                const d = state.marketData[symbol];
+                const data = []; let p = d.last - 100; 
+                let time = Math.floor(Date.now() / 1000) - (150 * getSec(tf));
+                for (let i = 0; i < 150; i++) { const t = time + (i * getSec(tf)); const move = (Math.random() - 0.5) * 10; const open = p; const close = p + move; data.push({ time: t, open, high: Math.max(open, close) + Math.random() * 5, low: Math.min(open, close) - Math.random() * 5, close }); p = close; }
+                const ma = calcMa(data, 20);
+                candleSeries.setData(data); lineSeries.setData(data); barSeries.setData(data); maSeries.setData(ma);
+            } else {
+                const data = generateData(150, getSec(tf));
+                const ma = calcMa(data, 20);
+                candleSeries.setData(data); lineSeries.setData(data); barSeries.setData(data); maSeries.setData(ma);
+            }
+            if(chart) chart.timeScale().fitContent();
+        }
+
+        // Init & Load Config
+        window.onload = function() { 
+            lucide.createIcons(); 
+            switchTab('config'); 
+            
+            // Load config dari localStorage HP jika pernah disimpan
+            const saved = localStorage.getItem('sunong_mobile_config');
+            if (saved) {
+                try {
+                    const config = JSON.parse(saved);
+                    if (config.proxyIp) document.getElementById('cfg-proxy-ip').value = config.proxyIp;
+                    if (config.proxyPort) document.getElementById('cfg-proxy-port').value = config.proxyIp;
+                    if (config.target) document.getElementById('cfg-target').value = config.target;
+                    if (config.sender) document.getElementById('cfg-sender').value = config.sender;
+                    if (config.broker) document.getElementById('cfg-broker').value = config.broker;
+                    if (config.account) document.getElementById('cfg-account').value = config.account;
+                    if (config.password) document.getElementById('cfg-password').value = config.password;
+                } catch (e) {}
+            }
+        };
+    </script>
+</body>
+</html>
